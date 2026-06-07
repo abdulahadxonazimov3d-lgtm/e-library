@@ -45,6 +45,7 @@ async function extractPdfText(file) {
 
 function App() {
   const [session, setSession] = useState(null);
+  const [appUser, setAppUser] = useState(() => JSON.parse(localStorage.getItem("bmi_app_user") || "null"));
   const [localAdmin, setLocalAdmin] = useState(() => localStorage.getItem("bmi_local_admin") === "true");
   const [profile, setProfile] = useState(null);
   const [books, setBooks] = useState([]);
@@ -60,7 +61,7 @@ function App() {
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem("bmi_theme_mode") || "system");
   const [loading, setLoading] = useState(true);
 
-  const user = localAdmin ? { id: "local-admin", email: LOCAL_ADMIN_EMAIL } : (session?.user || null);
+  const user = localAdmin ? { id: "local-admin", email: LOCAL_ADMIN_EMAIL } : (appUser || session?.user || null);
   const isAdmin = localAdmin || profile?.role === "admin";
 
   useEffect(() => {
@@ -106,7 +107,7 @@ function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, loadProfiles)
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [user?.id, profile?.role, localAdmin]);
+  }, [user?.id, profile?.role, localAdmin, appUser?.id]);
 
   async function loadAll() {
     setLoading(true);
@@ -119,6 +120,10 @@ function App() {
     if (!user) return;
     if (localAdmin) {
       setProfile({ id: "local-admin", full_name: "Admin", group_name: "", role: "admin" });
+      return;
+    }
+    if (appUser) {
+      setProfile({ id: appUser.id, full_name: appUser.full_name, group_name: appUser.group_name, role: appUser.role || "user" });
       return;
     }
     const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).single();
@@ -150,11 +155,11 @@ function App() {
     if (!error) setQuizResults(data || []);
   }
   async function loadProfiles() {
-    if (!profile || profile.role !== "admin") return;
-    const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+    if (!isAdmin && !localAdmin) return;
+    const { data, error } = await supabase.from("app_users").select("*").order("created_at", { ascending: false });
     if (!error) setProfiles(data || []);
   }
-  useEffect(() => { if (isAdmin) loadProfiles(); }, [isAdmin]);
+  useEffect(() => { if (isAdmin || localAdmin) loadProfiles(); }, [isAdmin, localAdmin]);
 
   const requireAuth = (target) => {
     if (!user) {
@@ -212,7 +217,9 @@ function App() {
 
   const logout = async () => {
     localStorage.removeItem("bmi_local_admin");
+    localStorage.removeItem("bmi_app_user");
     setLocalAdmin(false);
+    setAppUser(null);
     await supabase.auth.signOut();
     setPage("home");
   };
@@ -244,7 +251,7 @@ function App() {
         {page === "detail" && selectedBook && <BookDetail book={books.find(b=>b.id===selectedBook.id) || selectedBook} downloadBook={downloadBook} comments={comments} loadComments={loadComments} profile={profile} user={user} quizQuestions={quizQuestions} quizResults={quizResults} loadQuizResults={loadQuizResults} toggleFavorite={toggleFavorite} isFavorite={isFavorite} />}
         {page === "recommend" && (user ? <RecommendPage recommendations={recommendations} openBook={openBook} /> : <AccessRequired setPage={setPage} />)}
         {page === "ai" && (user ? <AiAssistant books={books} openBook={openBook} /> : <AccessRequired setPage={setPage} />)}
-        {page === "login" && <LoginPage setPage={setPage} setSession={setSession} setLocalAdmin={setLocalAdmin} />}
+        {page === "login" && <LoginPage setPage={setPage} setSession={setSession} setLocalAdmin={setLocalAdmin} setAppUser={setAppUser} />}
         {page === "profile" && <ProfilePage user={user} profile={profile} books={books} favorites={favorites} history={history} quizResults={quizResults} themeMode={themeMode} setThemeMode={setThemeMode} loadProfile={loadProfile} />}
         {page === "admin" && (isAdmin ? <AdminPanel books={books} loadBooks={loadBooks} profiles={profiles} favorites={favorites} history={history} quizResults={quizResults} quizQuestions={quizQuestions} loadQuizQuestions={loadQuizQuestions} /> : <AccessRequired setPage={setPage} />)}
       </main>
@@ -426,7 +433,7 @@ function AiAssistant({ books, openBook }) {
   return <><SectionTitle title="AI kitob tavsiya yordamchisi"/><div className="aiBox"><p>AI yordamchi admin yuklagan PDF matnlari ichidan savolga mos javob qidiradi.</p><div className="search"><Sparkles size={18}/><input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&ask()} placeholder="Savolingizni yozing..."/></div><button onClick={ask}>Javob berish</button></div>{answers.map((a,i)=><div className="answer" key={i}><h3>Savol: {a.q}</h3><p>{a.text}</p>{a.result?.length?<div className="bookGrid">{a.result.map(b=><BookCard key={b.id} book={b} openBook={openBook}/>)}</div>:null}</div>)}</>;
 }
 
-function LoginPage({ setPage, setLocalAdmin }) {
+function LoginPage({ setPage, setLocalAdmin, setAppUser }) {
   const [mode,setMode]=useState("login");
   const [fullName,setFullName]=useState("");
   const [groupName,setGroupName]=useState("");
@@ -467,6 +474,12 @@ function ProfilePage({ user, profile, books, favorites, history, quizResults, th
       return;
     }
     if(!newPass.trim()) return alert("Yangi parolni kiriting.");
+    if(user.id && user.id !== "local-admin") {
+      const { error } = await supabase.from("app_users").update({ password: newPass.trim() }).eq("id", user.id);
+      if(error) return alert(error.message);
+      setOldPass(""); setNewPass(""); alert("Parol almashtirildi.");
+      return;
+    }
     const { error } = await supabase.auth.updateUser({ password:newPass });
     if(error) return alert(error.message);
     setOldPass(""); setNewPass(""); alert("Parol almashtirildi.");
