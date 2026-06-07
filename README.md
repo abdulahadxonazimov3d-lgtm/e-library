@@ -146,3 +146,17 @@ Bu versiyada F5 bosilganda sahifa bosh sahifaga qaytmaydi. Sahifa URL hash orqal
 - `#detail/<kitob_id>`
 
 Admin paneldagi foydalanuvchilar `public.app_users` jadvalidan yuklanadi.
+
+
+## AUTH FINAL STABLE
+
+Ushbu versiyada:
+- Admin: `admin@kutubxona.uz / 123456` bilan darhol admin panelga kiradi.
+- Oddiy foydalanuvchi: Supabase Auth ishlatmaydi, `app_users` jadvaliga yoziladi.
+- Ro‘yxatdan o‘tishda guruh nomi yo‘q.
+- Ro‘yxatdan o‘tishda email confirmation, email rate limit, waiting verification ishlatilmaydi.
+
+Majburiy:
+1. GitHub’dagi barcha fayllarni shu ZIP ichidagi fayllar bilan almashtiring.
+2. Vercel’da Redeploy qiling.
+3. Supabase SQL Editor’da yangi `supabase/schema.sql` faylini to‘liq Run qiling.
