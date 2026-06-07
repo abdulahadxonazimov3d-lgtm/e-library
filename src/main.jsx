@@ -513,8 +513,23 @@ function LoginPage({ setPage, setLocalAdmin, setAppUser }) {
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
 
+  const saveAppUser = (data) => {
+    const logged = {
+      id: data.id,
+      email: data.email,
+      full_name: data.full_name,
+      group_name: data.group_name || "",
+      role: data.role || "user"
+    };
+    localStorage.setItem("bmi_app_user", JSON.stringify(logged));
+    localStorage.removeItem("bmi_local_admin");
+    setLocalAdmin(false);
+    setAppUser(logged);
+    setPage("books");
+  };
+
   async function register() {
-    if(!fullName.trim()||!email.trim()||!password.trim()) {
+    if(!fullName.trim() || !email.trim() || !password.trim()) {
       return alert("Ma'lumotlarni to‘liq kiriting.");
     }
     if(password.trim().length < 6) {
@@ -529,8 +544,12 @@ function LoginPage({ setPage, setLocalAdmin, setAppUser }) {
       .eq("email", cleanEmail)
       .maybeSingle();
 
-    if(checkError) return alert(checkError.message);
-    if(exists) return alert("Bu email bilan avval ro‘yxatdan o‘tilgan.");
+    if (checkError) {
+      return alert("app_users jadvali yoki RLS ruxsatida muammo bor. Supabase SQL Editor’da schema.sql kodini to‘liq Run qiling. Xato: " + checkError.message);
+    }
+    if (exists) {
+      return alert("Bu email bilan avval ro‘yxatdan o‘tilgan. Kirish bo‘limidan kiring.");
+    }
 
     const { data, error } = await supabase
       .from("app_users")
@@ -544,30 +563,15 @@ function LoginPage({ setPage, setLocalAdmin, setAppUser }) {
       .select()
       .single();
 
-    if(error) return alert(error.message);
+    if(error) {
+      return alert("Ro‘yxatdan o‘tishda xato: " + error.message);
+    }
 
-    const logged = {
-      id: data.id,
-      email: data.email,
-      full_name: data.full_name,
-      group_name: "",
-      role: data.role
-    };
-
-    localStorage.setItem("bmi_app_user", JSON.stringify(logged));
-    localStorage.removeItem("bmi_local_admin");
-    localStorage.removeItem("bmi_app_user");
-    localStorage.removeItem("bmi_selected_book_id");
-    setSelectedBookId("");
-    setSelectedBook(null);
-    setLocalAdmin(false);
-    setAppUser(null);
-    setAppUser(logged);
-    setPage("books");
+    saveAppUser(data);
   }
 
   async function login() {
-    if(!email.trim()||!password.trim()) {
+    if(!email.trim() || !password.trim()) {
       return alert("Ma'lumotlarni to‘liq kiriting.");
     }
 
@@ -579,6 +583,7 @@ function LoginPage({ setPage, setLocalAdmin, setAppUser }) {
       setAppUser(null);
       setLocalAdmin(true);
       setPage("admin");
+      window.history.replaceState(null, "", "#admin");
       return;
     }
 
@@ -589,27 +594,14 @@ function LoginPage({ setPage, setLocalAdmin, setAppUser }) {
       .eq("password", password.trim())
       .maybeSingle();
 
-    if(error) return alert(error.message);
-    if(!data) return alert("Bunday foydalanuvchi ro‘yxatdan o‘tmagan yoki parol noto‘g‘ri.");
+    if(error) {
+      return alert("Kirishda xato: " + error.message);
+    }
+    if(!data) {
+      return alert("Bunday foydalanuvchi ro‘yxatdan o‘tmagan yoki parol noto‘g‘ri.");
+    }
 
-    const logged = {
-      id: data.id,
-      email: data.email,
-      full_name: data.full_name,
-      group_name: data.group_name || "",
-      role: data.role
-    };
-
-    localStorage.setItem("bmi_app_user", JSON.stringify(logged));
-    localStorage.removeItem("bmi_local_admin");
-    localStorage.removeItem("bmi_app_user");
-    localStorage.removeItem("bmi_selected_book_id");
-    setSelectedBookId("");
-    setSelectedBook(null);
-    setLocalAdmin(false);
-    setAppUser(null);
-    setAppUser(logged);
-    setPage("books");
+    saveAppUser(data);
   }
 
   return <div className="loginPage"><div className="loginCard"><Shield size={42}/><h2>{mode==="login"?"Tizimga kirish":"Ro‘yxatdan o‘tish"}</h2><div className="authSwitch"><button className={mode==="login"?"active":""} onClick={()=>setMode("login")}>Kirish</button><button className={mode==="register"?"active":""} onClick={()=>setMode("register")}>Ro‘yxatdan o‘tish</button></div>{mode==="register"&&<input placeholder="F.I.Sh" value={fullName} onChange={e=>setFullName(e.target.value)}/>}<input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/><input type="password" placeholder="Parol" value={password} onChange={e=>setPassword(e.target.value)}/>{mode==="login"?<button onClick={login}>Kirish</button>:<button onClick={register}>Ro‘yxatdan o‘tish</button>}</div></div>;
@@ -702,7 +694,7 @@ function AdminPanel({ books, loadBooks, profiles, favorites, history, quizResult
   return <><SectionTitle title="Admin boshqaruv paneli"/><div className="tabs">{[["stats","Statistika"],["manage","Kitoblarni boshqarish"],["users","Foydalanuvchilar"],["quizResults","Quiz natijalari"]].map(([v,t])=><button key={v} className={tab===v?"active":""} onClick={()=>setTab(v)}>{t}</button>)}<button className={tab==="add"?"active":""} onClick={()=>{setEditing(null);setForm(emptyBook());setTab("add")}}><Plus size={16}/> Kitob yuklash</button></div>
     {tab==="stats"&&<><div className="statsGrid"><Stat title="Jami kitoblar" value={books.length}/><Stat title="Jami ko‘rishlar" value={books.reduce((s,b)=>s+(b.views||0),0)}/><Stat title="Yuklab olishlar" value={books.reduce((s,b)=>s+(b.downloads||0),0)}/><Stat title="Sevimlilar" value={favorites.length}/><Stat title="Quiz natijalari" value={quizResults.length}/></div><div className="chartCard"><h3>Kunlik foydalanish</h3><ResponsiveContainer width="100%" height={280}><LineChart data={chartData.length?chartData:[{date:new Date().toISOString().slice(0,10),views:0,downloads:0}]}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="date"/><YAxis/><Tooltip/><Line type="monotone" dataKey="views"/><Line type="monotone" dataKey="downloads"/></LineChart></ResponsiveContainer></div><div className="chartCard"><h3>Eng ko‘p o‘qilgan kitoblar</h3><ResponsiveContainer width="100%" height={280}><BarChart data={books.slice().sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,6)}><XAxis dataKey="title"/><YAxis/><Tooltip/><Bar dataKey="views"/></BarChart></ResponsiveContainer></div></>}
     {tab==="manage"&&<div className="adminList">{books.map(b=><div className="adminItem" key={b.id}>{b.cover_url?<img src={b.cover_url}/>:<div className="miniCover"><BookOpen size={22}/></div>}<div><b>{b.title}</b><span>{b.author} · {b.category} · {b.pdf_url?"PDF bor":"PDF yo‘q"}</span></div><button onClick={()=>editBook(b)}><Pencil size={16}/> Tahrirlash</button><button className="danger" onClick={()=>deleteBook(b.id)}><Trash2 size={16}/> O‘chirish</button></div>)}</div>}
-    {tab==="users"&&<div className="adminTable"><h3>Ro‘yxatdan o‘tgan foydalanuvchilar</h3>{profiles.map((p,i)=>{const uh=history.filter(h=>h.user_id===p.id), uf=favorites.filter(f=>f.user_id===p.id), uq=quizResults.filter(r=>r.user_id===p.id); const rids=[...new Set(uh.map(h=>h.book_id))]; const favNames=uf.map(f=>books.find(b=>b.id===f.book_id)?.title).filter(Boolean); const readNames=rids.map(id=>books.find(b=>b.id===id)?.title).filter(Boolean); return <div className="adminUserCard" key={p.id}><div className="adminUserTop"><b>{i+1}. {p.full_name}</b><span>{p.group_name || "Guruh kiritilmagan"}</span><span>{p.role}</span></div><div className="adminUserStats"><span>O‘qigan/o‘qimoqda: <b>{rids.length}</b></span><span>Yuklab olgan: <b>{new Set(uh.filter(h=>h.status==="downloaded").map(h=>h.book_id)).size}</b></span><span>Sevimlilar: <b>{uf.length}</b></span><span>Quiz: <b>{uq.length}</b></span><span>Oxirgi ball: <b>{uq[0]?.percent ?? "Yo‘q"}{uq[0]?"%":""}</b></span></div><div className="adminUserDetails"><p><b>Sevimliga qo‘shgan kitoblari:</b> {favNames.length?favNames.join(", "):"Yo‘q"}</p><p><b>O‘qigan/o‘qiyotgan kitoblari:</b> {readNames.length?readNames.join(", "):"Yo‘q"}</p></div></div>})}</div>}
+    {tab==="users"&&<div className="adminTable"><h3>Ro‘yxatdan o‘tgan foydalanuvchilar</h3>{profiles.map((p,i)=>{const uh=history.filter(h=>h.user_id===p.id), uf=favorites.filter(f=>f.user_id===p.id), uq=quizResults.filter(r=>r.user_id===p.id); const rids=[...new Set(uh.map(h=>h.book_id))]; const favNames=uf.map(f=>books.find(b=>b.id===f.book_id)?.title).filter(Boolean); const readNames=rids.map(id=>books.find(b=>b.id===id)?.title).filter(Boolean); return <div className="adminUserCard" key={p.id}><div className="adminUserTop"><b>{i+1}. {p.full_name}</b><span>{p.email}</span><span>{p.role}</span></div><div className="adminUserStats"><span>O‘qigan/o‘qimoqda: <b>{rids.length}</b></span><span>Yuklab olgan: <b>{new Set(uh.filter(h=>h.status==="downloaded").map(h=>h.book_id)).size}</b></span><span>Sevimlilar: <b>{uf.length}</b></span><span>Quiz: <b>{uq.length}</b></span><span>Oxirgi ball: <b>{uq[0]?.percent ?? "Yo‘q"}{uq[0]?"%":""}</b></span></div><div className="adminUserDetails"><p><b>Sevimliga qo‘shgan kitoblari:</b> {favNames.length?favNames.join(", "):"Yo‘q"}</p><p><b>O‘qigan/o‘qiyotgan kitoblari:</b> {readNames.length?readNames.join(", "):"Yo‘q"}</p></div></div>})}</div>}
     {tab==="quizResults"&&<div className="adminTable"><h3>Barcha quiz natijalari</h3>{quizResults.map((r,i)=><div className="adminTableRow" key={r.id}><b>{i+1}. {r.user_name}</b><span>{r.book_title}</span><span>{r.correct}/{r.total} — {r.percent}%</span><span>{fmtDate(r.created_at)}</span></div>)}</div>}
     {tab==="add"&&<div className="bookForm"><input placeholder="Kitob nomi" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/><input placeholder="Muallif" value={form.author} onChange={e=>setForm({...form,author:e.target.value})}/><input placeholder="Kategoriya" value={form.category} onChange={e=>setForm({...form,category:e.target.value})}/><textarea placeholder="Kitob tavsifi" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/><label className="fileBox"><b>Kitob rasmi yuklash</b><span>{form.coverFile?.name||"Rasm tanlang"}</span><input type="file" accept="image/*" onChange={e=>setForm({...form,coverFile:e.target.files[0]})}/></label><label className="fileBox"><b>PDF kitob yuklash</b><span>{form.pdfFile?.name||"PDF tanlang"}</span><input type="file" accept="application/pdf,.pdf" onChange={e=>setForm({...form,pdfFile:e.target.files[0]})}/></label><div className="quizAdminBox"><h3>Quiz testlarni boshqarish</h3><input placeholder="Test savoli" value={quizDraft.question} onChange={e=>setQuizDraft({...quizDraft,question:e.target.value})}/>{quizDraft.options.map((o,i)=><input key={i} placeholder={`${String.fromCharCode(65+i)}-variant`} value={o} onChange={e=>{const next=[...quizDraft.options];next[i]=e.target.value;setQuizDraft({...quizDraft,options:next})}}/>)}<select value={quizDraft.correct_index} onChange={e=>setQuizDraft({...quizDraft,correct_index:Number(e.target.value)})}>{[0,1,2,3].map(i=><option key={i} value={i}>To‘g‘ri javob: {String.fromCharCode(65+i)}</option>)}</select><button type="button" onClick={addQuiz}>Quiz savol qo‘shish</button><div className="quizAdminList">{(editing?quizQuestions.filter(q=>q.book_id===editing):(form.quiz||[])).map((q,i)=><div className="quizAdminItem" key={q.id}><b>{i+1}. {q.question}</b><span>To‘g‘ri javob: {String.fromCharCode(65+Number(q.correct_index))}</span>{editing&&<button className="danger" onClick={()=>deleteQuiz(q.id)}>O‘chirish</button>}</div>)}</div></div><button onClick={saveBook} disabled={loading}>{loading?"Saqlanmoqda...":editing?"O‘zgarishlarni saqlash":"Kitob yuklash"}</button></div>}
   </>;
