@@ -84,3 +84,19 @@ Ushbu versiyada kod `npm run build` orqali tekshirildi. GitHub → Vercel → Su
 8. Supabase free plan’da Storage hajmi va bandwidth chegaralari bor. Katta PDF fayllar uchun shu limitlarga e’tibor bering.
 
 100% ishlashi Supabase sozlamalari to‘g‘ri bajarilishiga bog‘liq. Kod tomoni builddan o‘tdi va asosiy xatoliklar tuzatildi.
+
+
+## Admin panelga ro‘yxatdan o‘tmasdan kirish
+
+Ushbu versiyada admin panelga kirish uchun Supabase Auth orqali alohida admin user yaratish shart emas.
+
+Admin login:
+
+```text
+Email: admin@kutubxona.uz
+Parol: 123456
+```
+
+Bu login faqat admin panel uchun ishlaydi. Oddiy foydalanuvchilar esa ro‘yxatdan o‘tish orqali tizimga kiradi.
+
+Muhim: yangi `supabase/schema.sql` faylini Supabase SQL Editor’da qayta Run qiling, chunki lokal admin panel PDF/rasm yuklay olishi uchun qo‘shimcha policylar qo‘shilgan.
