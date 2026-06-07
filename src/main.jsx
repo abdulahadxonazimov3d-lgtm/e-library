@@ -55,8 +55,9 @@ function App() {
   const [quizQuestions, setQuizQuestions] = useState([]);
   const [quizResults, setQuizResults] = useState([]);
   const [profiles, setProfiles] = useState([]);
-  const [page, setPage] = useState("home");
+  const [page, setPage] = useState(() => localStorage.getItem("bmi_current_page") || "home");
   const [selectedBook, setSelectedBook] = useState(null);
+  const [selectedBookId, setSelectedBookId] = useState(() => localStorage.getItem("bmi_selected_book_id") || "");
   const [sidebar, setSidebar] = useState(false);
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem("bmi_theme_mode") || "system");
   const [loading, setLoading] = useState(true);
@@ -69,6 +70,14 @@ function App() {
     document.body.classList.add(`theme-${themeMode}`);
     localStorage.setItem("bmi_theme_mode", themeMode);
   }, [themeMode]);
+
+  useEffect(() => {
+    localStorage.setItem("bmi_current_page", page);
+  }, [page]);
+
+  useEffect(() => {
+    if (selectedBookId) localStorage.setItem("bmi_selected_book_id", selectedBookId);
+  }, [selectedBookId]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -161,6 +170,13 @@ function App() {
   }
   useEffect(() => { if (isAdmin || localAdmin) loadProfiles(); }, [isAdmin, localAdmin]);
 
+  useEffect(() => {
+    if (page === "detail" && selectedBookId && books.length) {
+      const found = books.find(b => b.id === selectedBookId);
+      if (found) setSelectedBook(found);
+    }
+  }, [page, selectedBookId, books.length]);
+
   const requireAuth = (target) => {
     if (!user) {
       alert("Elektron kutubxonadan to‘liq foydalanish uchun ro‘yxatdan o‘ting yoki tizimga kiring.");
@@ -195,6 +211,8 @@ function App() {
     }
     await supabase.from("reading_history").insert({ book_id: book.id, user_id: user.id, status: "reading" });
     setSelectedBook(book);
+    setSelectedBookId(book.id);
+    localStorage.setItem("bmi_selected_book_id", book.id);
     setPage("detail");
     await Promise.all([loadBooks(), loadHistory()]);
   };
@@ -218,6 +236,9 @@ function App() {
   const logout = async () => {
     localStorage.removeItem("bmi_local_admin");
     localStorage.removeItem("bmi_app_user");
+    localStorage.removeItem("bmi_selected_book_id");
+    setSelectedBookId("");
+    setSelectedBook(null);
     setLocalAdmin(false);
     setAppUser(null);
     await supabase.auth.signOut();
@@ -248,7 +269,12 @@ function App() {
         {loading && <div className="infoBox">Yuklanmoqda...</div>}
         {page === "home" && <HomePage books={books} requireAuth={requireAuth} openBook={openBook} />}
         {page === "books" && (user ? <BooksPage books={books} categories={categories} openBook={openBook} /> : <AccessRequired setPage={setPage} />)}
-        {page === "detail" && selectedBook && <BookDetail book={books.find(b=>b.id===selectedBook.id) || selectedBook} downloadBook={downloadBook} comments={comments} loadComments={loadComments} profile={profile} user={user} quizQuestions={quizQuestions} quizResults={quizResults} loadQuizResults={loadQuizResults} toggleFavorite={toggleFavorite} isFavorite={isFavorite} />}
+        {page === "detail" && (selectedBook || selectedBookId) && (() => {
+          const activeBook = books.find(b => b.id === (selectedBook?.id || selectedBookId)) || selectedBook;
+          return activeBook
+            ? <BookDetail book={activeBook} downloadBook={downloadBook} comments={comments} loadComments={loadComments} profile={profile} user={user} quizQuestions={quizQuestions} quizResults={quizResults} loadQuizResults={loadQuizResults} toggleFavorite={toggleFavorite} isFavorite={isFavorite} />
+            : <div className="infoBox">Kitob ma’lumotlari yuklanmoqda...</div>;
+        })()}
         {page === "recommend" && (user ? <RecommendPage recommendations={recommendations} openBook={openBook} /> : <AccessRequired setPage={setPage} />)}
         {page === "ai" && (user ? <AiAssistant books={books} openBook={openBook} /> : <AccessRequired setPage={setPage} />)}
         {page === "login" && <LoginPage setPage={setPage} setSession={setSession} setLocalAdmin={setLocalAdmin} setAppUser={setAppUser} />}
@@ -483,6 +509,9 @@ function LoginPage({ setPage, setLocalAdmin, setAppUser }) {
     localStorage.setItem("bmi_app_user", JSON.stringify(logged));
     localStorage.removeItem("bmi_local_admin");
     localStorage.removeItem("bmi_app_user");
+    localStorage.removeItem("bmi_selected_book_id");
+    setSelectedBookId("");
+    setSelectedBook(null);
     setLocalAdmin(false);
     setAppUser(null);
     setAppUser(logged);
@@ -526,6 +555,9 @@ function LoginPage({ setPage, setLocalAdmin, setAppUser }) {
     localStorage.setItem("bmi_app_user", JSON.stringify(logged));
     localStorage.removeItem("bmi_local_admin");
     localStorage.removeItem("bmi_app_user");
+    localStorage.removeItem("bmi_selected_book_id");
+    setSelectedBookId("");
+    setSelectedBook(null);
     setLocalAdmin(false);
     setAppUser(null);
     setAppUser(logged);
