@@ -24,6 +24,20 @@ const fmtDate = (v) => v ? new Date(v).toLocaleString("uz-UZ") : "";
 const normalize = (v) => String(v || "").trim().toLowerCase();
 const publicUrl = (bucket, path) => supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 
+function getInitialPage() {
+  const hash = window.location.hash.replace("#", "");
+  if (hash.startsWith("detail/")) return "detail";
+  if (hash) return hash;
+  return localStorage.getItem("bmi_current_page") || "home";
+}
+
+function getInitialBookId() {
+  const hash = window.location.hash.replace("#", "");
+  if (hash.startsWith("detail/")) return hash.split("/")[1] || "";
+  return localStorage.getItem("bmi_selected_book_id") || "";
+}
+
+
 async function extractPdfText(file) {
   if (!file) return "";
   try {
@@ -55,9 +69,9 @@ function App() {
   const [quizQuestions, setQuizQuestions] = useState([]);
   const [quizResults, setQuizResults] = useState([]);
   const [profiles, setProfiles] = useState([]);
-  const [page, setPage] = useState(() => localStorage.getItem("bmi_current_page") || "home");
+  const [page, setPage] = useState(() => getInitialPage());
   const [selectedBook, setSelectedBook] = useState(null);
-  const [selectedBookId, setSelectedBookId] = useState(() => localStorage.getItem("bmi_selected_book_id") || "");
+  const [selectedBookId, setSelectedBookId] = useState(() => getInitialBookId());
   const [sidebar, setSidebar] = useState(false);
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem("bmi_theme_mode") || "system");
   const [loading, setLoading] = useState(true);
@@ -73,11 +87,41 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem("bmi_current_page", page);
+    if (page !== "detail") {
+      const nextHash = page === "home" ? "#home" : `#${page}`;
+      if (window.location.hash !== nextHash) {
+        window.history.replaceState(null, "", nextHash);
+      }
+    }
   }, [page]);
 
   useEffect(() => {
-    if (selectedBookId) localStorage.setItem("bmi_selected_book_id", selectedBookId);
-  }, [selectedBookId]);
+    if (selectedBookId) {
+      localStorage.setItem("bmi_selected_book_id", selectedBookId);
+      if (page === "detail") {
+        const nextHash = `#detail/${selectedBookId}`;
+        if (window.location.hash !== nextHash) {
+          window.history.replaceState(null, "", nextHash);
+        }
+      }
+    }
+  }, [selectedBookId, page]);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = window.location.hash.replace("#", "");
+      if (hash.startsWith("detail/")) {
+        const id = hash.split("/")[1] || "";
+        setSelectedBookId(id);
+        setPage("detail");
+      } else if (hash) {
+        setPage(hash);
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -164,9 +208,12 @@ function App() {
     if (!error) setQuizResults(data || []);
   }
   async function loadProfiles() {
-    if (!isAdmin && !localAdmin) return;
-    const { data, error } = await supabase.from("app_users").select("*").order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("app_users")
+      .select("*")
+      .order("created_at", { ascending: false });
     if (!error) setProfiles(data || []);
+    if (error) console.warn("app_users load error:", error.message);
   }
   useEffect(() => { if (isAdmin || localAdmin) loadProfiles(); }, [isAdmin, localAdmin]);
 
@@ -213,6 +260,7 @@ function App() {
     setSelectedBook(book);
     setSelectedBookId(book.id);
     localStorage.setItem("bmi_selected_book_id", book.id);
+    window.history.replaceState(null, "", `#detail/${book.id}`);
     setPage("detail");
     await Promise.all([loadBooks(), loadHistory()]);
   };
@@ -654,7 +702,7 @@ function AdminPanel({ books, loadBooks, profiles, favorites, history, quizResult
   return <><SectionTitle title="Admin boshqaruv paneli"/><div className="tabs">{[["stats","Statistika"],["manage","Kitoblarni boshqarish"],["users","Foydalanuvchilar"],["quizResults","Quiz natijalari"]].map(([v,t])=><button key={v} className={tab===v?"active":""} onClick={()=>setTab(v)}>{t}</button>)}<button className={tab==="add"?"active":""} onClick={()=>{setEditing(null);setForm(emptyBook());setTab("add")}}><Plus size={16}/> Kitob yuklash</button></div>
     {tab==="stats"&&<><div className="statsGrid"><Stat title="Jami kitoblar" value={books.length}/><Stat title="Jami ko‘rishlar" value={books.reduce((s,b)=>s+(b.views||0),0)}/><Stat title="Yuklab olishlar" value={books.reduce((s,b)=>s+(b.downloads||0),0)}/><Stat title="Sevimlilar" value={favorites.length}/><Stat title="Quiz natijalari" value={quizResults.length}/></div><div className="chartCard"><h3>Kunlik foydalanish</h3><ResponsiveContainer width="100%" height={280}><LineChart data={chartData.length?chartData:[{date:new Date().toISOString().slice(0,10),views:0,downloads:0}]}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="date"/><YAxis/><Tooltip/><Line type="monotone" dataKey="views"/><Line type="monotone" dataKey="downloads"/></LineChart></ResponsiveContainer></div><div className="chartCard"><h3>Eng ko‘p o‘qilgan kitoblar</h3><ResponsiveContainer width="100%" height={280}><BarChart data={books.slice().sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,6)}><XAxis dataKey="title"/><YAxis/><Tooltip/><Bar dataKey="views"/></BarChart></ResponsiveContainer></div></>}
     {tab==="manage"&&<div className="adminList">{books.map(b=><div className="adminItem" key={b.id}>{b.cover_url?<img src={b.cover_url}/>:<div className="miniCover"><BookOpen size={22}/></div>}<div><b>{b.title}</b><span>{b.author} · {b.category} · {b.pdf_url?"PDF bor":"PDF yo‘q"}</span></div><button onClick={()=>editBook(b)}><Pencil size={16}/> Tahrirlash</button><button className="danger" onClick={()=>deleteBook(b.id)}><Trash2 size={16}/> O‘chirish</button></div>)}</div>}
-    {tab==="users"&&<div className="adminTable"><h3>Ro‘yxatdan o‘tgan foydalanuvchilar</h3>{profiles.map((p,i)=>{const uh=history.filter(h=>h.user_id===p.id), uf=favorites.filter(f=>f.user_id===p.id), uq=quizResults.filter(r=>r.user_id===p.id); const rids=[...new Set(uh.map(h=>h.book_id))]; const favNames=uf.map(f=>books.find(b=>b.id===f.book_id)?.title).filter(Boolean); const readNames=rids.map(id=>books.find(b=>b.id===id)?.title).filter(Boolean); return <div className="adminUserCard" key={p.id}><div className="adminUserTop"><b>{i+1}. {p.full_name}</b><span>{p.group_name}</span><span>{p.role}</span></div><div className="adminUserStats"><span>O‘qigan/o‘qimoqda: <b>{rids.length}</b></span><span>Yuklab olgan: <b>{new Set(uh.filter(h=>h.status==="downloaded").map(h=>h.book_id)).size}</b></span><span>Sevimlilar: <b>{uf.length}</b></span><span>Quiz: <b>{uq.length}</b></span><span>Oxirgi ball: <b>{uq[0]?.percent ?? "Yo‘q"}{uq[0]?"%":""}</b></span></div><div className="adminUserDetails"><p><b>Sevimliga qo‘shgan kitoblari:</b> {favNames.length?favNames.join(", "):"Yo‘q"}</p><p><b>O‘qigan/o‘qiyotgan kitoblari:</b> {readNames.length?readNames.join(", "):"Yo‘q"}</p></div></div>})}</div>}
+    {tab==="users"&&<div className="adminTable"><h3>Ro‘yxatdan o‘tgan foydalanuvchilar</h3>{profiles.map((p,i)=>{const uh=history.filter(h=>h.user_id===p.id), uf=favorites.filter(f=>f.user_id===p.id), uq=quizResults.filter(r=>r.user_id===p.id); const rids=[...new Set(uh.map(h=>h.book_id))]; const favNames=uf.map(f=>books.find(b=>b.id===f.book_id)?.title).filter(Boolean); const readNames=rids.map(id=>books.find(b=>b.id===id)?.title).filter(Boolean); return <div className="adminUserCard" key={p.id}><div className="adminUserTop"><b>{i+1}. {p.full_name}</b><span>{p.group_name || "Guruh kiritilmagan"}</span><span>{p.role}</span></div><div className="adminUserStats"><span>O‘qigan/o‘qimoqda: <b>{rids.length}</b></span><span>Yuklab olgan: <b>{new Set(uh.filter(h=>h.status==="downloaded").map(h=>h.book_id)).size}</b></span><span>Sevimlilar: <b>{uf.length}</b></span><span>Quiz: <b>{uq.length}</b></span><span>Oxirgi ball: <b>{uq[0]?.percent ?? "Yo‘q"}{uq[0]?"%":""}</b></span></div><div className="adminUserDetails"><p><b>Sevimliga qo‘shgan kitoblari:</b> {favNames.length?favNames.join(", "):"Yo‘q"}</p><p><b>O‘qigan/o‘qiyotgan kitoblari:</b> {readNames.length?readNames.join(", "):"Yo‘q"}</p></div></div>})}</div>}
     {tab==="quizResults"&&<div className="adminTable"><h3>Barcha quiz natijalari</h3>{quizResults.map((r,i)=><div className="adminTableRow" key={r.id}><b>{i+1}. {r.user_name}</b><span>{r.book_title}</span><span>{r.correct}/{r.total} — {r.percent}%</span><span>{fmtDate(r.created_at)}</span></div>)}</div>}
     {tab==="add"&&<div className="bookForm"><input placeholder="Kitob nomi" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/><input placeholder="Muallif" value={form.author} onChange={e=>setForm({...form,author:e.target.value})}/><input placeholder="Kategoriya" value={form.category} onChange={e=>setForm({...form,category:e.target.value})}/><textarea placeholder="Kitob tavsifi" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/><label className="fileBox"><b>Kitob rasmi yuklash</b><span>{form.coverFile?.name||"Rasm tanlang"}</span><input type="file" accept="image/*" onChange={e=>setForm({...form,coverFile:e.target.files[0]})}/></label><label className="fileBox"><b>PDF kitob yuklash</b><span>{form.pdfFile?.name||"PDF tanlang"}</span><input type="file" accept="application/pdf,.pdf" onChange={e=>setForm({...form,pdfFile:e.target.files[0]})}/></label><div className="quizAdminBox"><h3>Quiz testlarni boshqarish</h3><input placeholder="Test savoli" value={quizDraft.question} onChange={e=>setQuizDraft({...quizDraft,question:e.target.value})}/>{quizDraft.options.map((o,i)=><input key={i} placeholder={`${String.fromCharCode(65+i)}-variant`} value={o} onChange={e=>{const next=[...quizDraft.options];next[i]=e.target.value;setQuizDraft({...quizDraft,options:next})}}/>)}<select value={quizDraft.correct_index} onChange={e=>setQuizDraft({...quizDraft,correct_index:Number(e.target.value)})}>{[0,1,2,3].map(i=><option key={i} value={i}>To‘g‘ri javob: {String.fromCharCode(65+i)}</option>)}</select><button type="button" onClick={addQuiz}>Quiz savol qo‘shish</button><div className="quizAdminList">{(editing?quizQuestions.filter(q=>q.book_id===editing):(form.quiz||[])).map((q,i)=><div className="quizAdminItem" key={q.id}><b>{i+1}. {q.question}</b><span>To‘g‘ri javob: {String.fromCharCode(65+Number(q.correct_index))}</span>{editing&&<button className="danger" onClick={()=>deleteQuiz(q.id)}>O‘chirish</button>}</div>)}</div></div><button onClick={saveBook} disabled={loading}>{loading?"Saqlanmoqda...":editing?"O‘zgarishlarni saqlash":"Kitob yuklash"}</button></div>}
   </>;
