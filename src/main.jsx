@@ -17,6 +17,9 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL || "", SUPABASE_ANON_KEY || "");
 
+const LOCAL_ADMIN_EMAIL = "admin@kutubxona.uz";
+const LOCAL_ADMIN_PASSWORD = "123456";
+
 const fmtDate = (v) => v ? new Date(v).toLocaleString("uz-UZ") : "";
 const normalize = (v) => String(v || "").trim().toLowerCase();
 const publicUrl = (bucket, path) => supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
@@ -42,6 +45,7 @@ async function extractPdfText(file) {
 
 function App() {
   const [session, setSession] = useState(null);
+  const [localAdmin, setLocalAdmin] = useState(() => localStorage.getItem("bmi_local_admin") === "true");
   const [profile, setProfile] = useState(null);
   const [books, setBooks] = useState([]);
   const [comments, setComments] = useState([]);
@@ -56,8 +60,8 @@ function App() {
   const [themeMode, setThemeMode] = useState(() => localStorage.getItem("bmi_theme_mode") || "system");
   const [loading, setLoading] = useState(true);
 
-  const user = session?.user || null;
-  const isAdmin = profile?.role === "admin";
+  const user = localAdmin ? { id: "local-admin", email: LOCAL_ADMIN_EMAIL } : (session?.user || null);
+  const isAdmin = localAdmin || profile?.role === "admin";
 
   useEffect(() => {
     document.body.className = "";
@@ -87,6 +91,9 @@ function App() {
       setProfiles([]);
       return;
     }
+    if (localAdmin) {
+      setProfile({ id: "local-admin", full_name: "Admin", group_name: "", role: "admin" });
+    }
     loadAll();
     const channel = supabase
       .channel("library-realtime")
@@ -99,7 +106,7 @@ function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, loadProfiles)
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [user?.id, profile?.role]);
+  }, [user?.id, profile?.role, localAdmin]);
 
   async function loadAll() {
     setLoading(true);
@@ -110,6 +117,10 @@ function App() {
 
   async function loadProfile() {
     if (!user) return;
+    if (localAdmin) {
+      setProfile({ id: "local-admin", full_name: "Admin", group_name: "", role: "admin" });
+      return;
+    }
     const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).single();
     if (!error) setProfile(data);
   }
@@ -200,6 +211,8 @@ function App() {
   };
 
   const logout = async () => {
+    localStorage.removeItem("bmi_local_admin");
+    setLocalAdmin(false);
     await supabase.auth.signOut();
     setPage("home");
   };
@@ -231,7 +244,7 @@ function App() {
         {page === "detail" && selectedBook && <BookDetail book={books.find(b=>b.id===selectedBook.id) || selectedBook} downloadBook={downloadBook} comments={comments} loadComments={loadComments} profile={profile} user={user} quizQuestions={quizQuestions} quizResults={quizResults} loadQuizResults={loadQuizResults} toggleFavorite={toggleFavorite} isFavorite={isFavorite} />}
         {page === "recommend" && (user ? <RecommendPage recommendations={recommendations} openBook={openBook} /> : <AccessRequired setPage={setPage} />)}
         {page === "ai" && (user ? <AiAssistant books={books} openBook={openBook} /> : <AccessRequired setPage={setPage} />)}
-        {page === "login" && <LoginPage setPage={setPage} setSession={setSession} />}
+        {page === "login" && <LoginPage setPage={setPage} setSession={setSession} setLocalAdmin={setLocalAdmin} />}
         {page === "profile" && <ProfilePage user={user} profile={profile} books={books} favorites={favorites} history={history} quizResults={quizResults} themeMode={themeMode} setThemeMode={setThemeMode} loadProfile={loadProfile} />}
         {page === "admin" && (isAdmin ? <AdminPanel books={books} loadBooks={loadBooks} profiles={profiles} favorites={favorites} history={history} quizResults={quizResults} quizQuestions={quizQuestions} loadQuizQuestions={loadQuizQuestions} /> : <AccessRequired setPage={setPage} />)}
       </main>
@@ -413,7 +426,7 @@ function AiAssistant({ books, openBook }) {
   return <><SectionTitle title="AI kitob tavsiya yordamchisi"/><div className="aiBox"><p>AI yordamchi admin yuklagan PDF matnlari ichidan savolga mos javob qidiradi.</p><div className="search"><Sparkles size={18}/><input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&ask()} placeholder="Savolingizni yozing..."/></div><button onClick={ask}>Javob berish</button></div>{answers.map((a,i)=><div className="answer" key={i}><h3>Savol: {a.q}</h3><p>{a.text}</p>{a.result?.length?<div className="bookGrid">{a.result.map(b=><BookCard key={b.id} book={b} openBook={openBook}/>)}</div>:null}</div>)}</>;
 }
 
-function LoginPage({ setPage }) {
+function LoginPage({ setPage, setLocalAdmin }) {
   const [mode,setMode]=useState("login");
   const [fullName,setFullName]=useState("");
   const [groupName,setGroupName]=useState("");
@@ -427,6 +440,14 @@ function LoginPage({ setPage }) {
   }
   async function login() {
     if(!email.trim()||!password.trim()) return alert("Ma'lumotlarni to‘liq kiriting.");
+
+    if (email.trim().toLowerCase() === LOCAL_ADMIN_EMAIL && password.trim() === LOCAL_ADMIN_PASSWORD) {
+      localStorage.setItem("bmi_local_admin", "true");
+      setLocalAdmin(true);
+      setPage("admin");
+      return;
+    }
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if(error) return alert("Bunday foydalanuvchi ro‘yxatdan o‘tmagan yoki parol noto‘g‘ri.");
     setPage("books");
@@ -441,6 +462,10 @@ function ProfilePage({ user, profile, books, favorites, history, quizResults, th
   const myHist=history.filter(h=>h.user_id===user.id);
   const myQuiz=quizResults.filter(r=>r.user_id===user.id);
   async function changePassword() {
+    if (user.email === LOCAL_ADMIN_EMAIL && profile?.role === "admin") {
+      alert("Demo admin paroli kod ichida belgilangan: 123456. Uni o‘zgartirish uchun dastur kodidagi LOCAL_ADMIN_PASSWORD qiymatini o‘zgartirish kerak.");
+      return;
+    }
     if(!newPass.trim()) return alert("Yangi parolni kiriting.");
     const { error } = await supabase.auth.updateUser({ password:newPass });
     if(error) return alert(error.message);
