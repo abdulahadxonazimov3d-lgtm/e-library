@@ -3,6 +3,17 @@
 
 create extension if not exists "pgcrypto";
 
+
+create table if not exists public.app_users (
+  id uuid primary key default gen_random_uuid(),
+  full_name text not null,
+  group_name text not null,
+  email text not null unique,
+  password text not null,
+  role text not null default 'user' check (role in ('user','admin')),
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null default '',
@@ -117,9 +128,6 @@ security definer
 set search_path = public
 as $$
 begin
-  if auth.uid() is null then
-    raise exception 'Authentication required';
-  end if;
   update public.books set views = views + 1, updated_at = now() where id = book_uuid;
 end;
 $$;
@@ -131,9 +139,6 @@ security definer
 set search_path = public
 as $$
 begin
-  if auth.uid() is null then
-    raise exception 'Authentication required';
-  end if;
   update public.books set downloads = downloads + 1, updated_at = now() where id = book_uuid;
 end;
 $$;
@@ -386,3 +391,60 @@ grant select on public.comments to anon;
 grant select on public.favorites to anon;
 grant select on public.reading_history to anon;
 grant select on public.quiz_results to anon;
+
+
+-- Email tasdiqlashsiz ishlaydigan foydalanuvchilar jadvali uchun ruxsatlar
+alter table public.app_users enable row level security;
+
+drop policy if exists "app_users_demo_all" on public.app_users;
+create policy "app_users_demo_all" on public.app_users
+for all using (true) with check (true);
+
+grant select, insert, update, delete on public.app_users to anon, authenticated;
+
+-- App foydalanuvchilar Supabase Auth ishlatmagani uchun user_id FK cheklovlarini olib tashlash
+do $$
+declare
+  r record;
+begin
+  for r in
+    select conrelid::regclass::text as table_name, conname
+    from pg_constraint
+    where contype = 'f'
+      and conrelid in ('public.comments'::regclass, 'public.favorites'::regclass, 'public.reading_history'::regclass, 'public.quiz_results'::regclass)
+      and pg_get_constraintdef(oid) ilike '%auth.users%'
+  loop
+    execute format('alter table %s drop constraint if exists %I', r.table_name, r.conname);
+  end loop;
+end $$;
+
+-- Oddiy foydalanuvchilar Supabase Auth sessiyasiz ishlashi uchun demo RLS ruxsatlari
+drop policy if exists "comments_app_select" on public.comments;
+create policy "comments_app_select" on public.comments for select using (auth.role() = 'anon');
+drop policy if exists "comments_app_insert" on public.comments;
+create policy "comments_app_insert" on public.comments for insert with check (auth.role() = 'anon');
+
+drop policy if exists "favorites_app_all" on public.favorites;
+create policy "favorites_app_all" on public.favorites for all using (auth.role() = 'anon') with check (auth.role() = 'anon');
+
+drop policy if exists "history_app_all" on public.reading_history;
+create policy "history_app_all" on public.reading_history for all using (auth.role() = 'anon') with check (auth.role() = 'anon');
+
+drop policy if exists "quiz_results_app_all" on public.quiz_results;
+create policy "quiz_results_app_all" on public.quiz_results for all using (auth.role() = 'anon') with check (auth.role() = 'anon');
+
+drop policy if exists "books_app_select" on public.books;
+create policy "books_app_select" on public.books for select using (auth.role() = 'anon');
+
+drop policy if exists "quiz_questions_app_select" on public.quiz_questions;
+create policy "quiz_questions_app_select" on public.quiz_questions for select using (auth.role() = 'anon');
+
+grant select, insert on public.comments to anon;
+grant select, insert, delete on public.favorites to anon;
+grant select, insert on public.reading_history to anon;
+grant select, insert on public.quiz_results to anon;
+grant select on public.books to anon;
+grant select on public.quiz_questions to anon;
+grant execute on function public.increment_book_view(uuid) to anon;
+grant execute on function public.increment_book_download(uuid) to anon;
+grant execute on function public.refresh_book_rating(uuid) to anon;
