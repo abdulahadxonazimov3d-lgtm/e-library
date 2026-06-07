@@ -571,3 +571,11 @@ $$;
 
 grant execute on function public.increment_book_view(uuid) to anon, authenticated;
 grant execute on function public.increment_book_download(uuid) to anon, authenticated;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.app_users;
+exception
+  when duplicate_object then null;
+  when undefined_object then null;
+end $$;
