@@ -135,3 +135,14 @@ Majburiy:
 ## F5 bosilganda sahifa saqlanishi
 
 Ushbu versiyada foydalanuvchi qaysi sahifada turgan bo‘lsa, F5 bosilganda ham shu sahifa qayta ochiladi. Agar kitobning batafsil sahifasida bo‘lsa, o‘sha kitob ID orqali qayta tiklanadi.
+
+
+## URL hash orqali sahifa saqlash
+
+Bu versiyada F5 bosilganda sahifa bosh sahifaga qaytmaydi. Sahifa URL hash orqali saqlanadi:
+- `#books`
+- `#admin`
+- `#profile`
+- `#detail/<kitob_id>`
+
+Admin paneldagi foydalanuvchilar `public.app_users` jadvalidan yuklanadi.
