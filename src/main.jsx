@@ -436,30 +436,103 @@ function AiAssistant({ books, openBook }) {
 function LoginPage({ setPage, setLocalAdmin, setAppUser }) {
   const [mode,setMode]=useState("login");
   const [fullName,setFullName]=useState("");
-  const [groupName,setGroupName]=useState("");
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
-  async function register() {
-    if(!fullName.trim()||!groupName.trim()||!email.trim()||!password.trim()) return alert("Ma'lumotlarni to‘liq kiriting.");
-    const { data, error } = await supabase.auth.signUp({ email, password, options:{ data:{ full_name:fullName, group_name:groupName } } });
-    if(error) return alert(error.message);
-    if(data.session) setPage("books"); else alert("Ro‘yxatdan o‘tildi. Email tasdiqlash yoqilgan bo‘lsa, emailingizni tasdiqlang va keyin kiring.");
-  }
-  async function login() {
-    if(!email.trim()||!password.trim()) return alert("Ma'lumotlarni to‘liq kiriting.");
 
-    if (email.trim().toLowerCase() === LOCAL_ADMIN_EMAIL && password.trim() === LOCAL_ADMIN_PASSWORD) {
+  async function register() {
+    if(!fullName.trim()||!email.trim()||!password.trim()) {
+      return alert("Ma'lumotlarni to‘liq kiriting.");
+    }
+    if(password.trim().length < 6) {
+      return alert("Parol kamida 6 ta belgidan iborat bo‘lishi kerak.");
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    const { data: exists, error: checkError } = await supabase
+      .from("app_users")
+      .select("id")
+      .eq("email", cleanEmail)
+      .maybeSingle();
+
+    if(checkError) return alert(checkError.message);
+    if(exists) return alert("Bu email bilan avval ro‘yxatdan o‘tilgan.");
+
+    const { data, error } = await supabase
+      .from("app_users")
+      .insert({
+        full_name: fullName.trim(),
+        group_name: "",
+        email: cleanEmail,
+        password: password.trim(),
+        role: "user"
+      })
+      .select()
+      .single();
+
+    if(error) return alert(error.message);
+
+    const logged = {
+      id: data.id,
+      email: data.email,
+      full_name: data.full_name,
+      group_name: "",
+      role: data.role
+    };
+
+    localStorage.setItem("bmi_app_user", JSON.stringify(logged));
+    localStorage.removeItem("bmi_local_admin");
+    localStorage.removeItem("bmi_app_user");
+    setLocalAdmin(false);
+    setAppUser(null);
+    setAppUser(logged);
+    setPage("books");
+  }
+
+  async function login() {
+    if(!email.trim()||!password.trim()) {
+      return alert("Ma'lumotlarni to‘liq kiriting.");
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (cleanEmail === LOCAL_ADMIN_EMAIL && password.trim() === LOCAL_ADMIN_PASSWORD) {
       localStorage.setItem("bmi_local_admin", "true");
+      localStorage.removeItem("bmi_app_user");
+      setAppUser(null);
       setLocalAdmin(true);
       setPage("admin");
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if(error) return alert("Bunday foydalanuvchi ro‘yxatdan o‘tmagan yoki parol noto‘g‘ri.");
+    const { data, error } = await supabase
+      .from("app_users")
+      .select("*")
+      .eq("email", cleanEmail)
+      .eq("password", password.trim())
+      .maybeSingle();
+
+    if(error) return alert(error.message);
+    if(!data) return alert("Bunday foydalanuvchi ro‘yxatdan o‘tmagan yoki parol noto‘g‘ri.");
+
+    const logged = {
+      id: data.id,
+      email: data.email,
+      full_name: data.full_name,
+      group_name: data.group_name || "",
+      role: data.role
+    };
+
+    localStorage.setItem("bmi_app_user", JSON.stringify(logged));
+    localStorage.removeItem("bmi_local_admin");
+    localStorage.removeItem("bmi_app_user");
+    setLocalAdmin(false);
+    setAppUser(null);
+    setAppUser(logged);
     setPage("books");
   }
-  return <div className="loginPage"><div className="loginCard"><Shield size={42}/><h2>{mode==="login"?"Tizimga kirish":"Ro‘yxatdan o‘tish"}</h2><div className="authSwitch"><button className={mode==="login"?"active":""} onClick={()=>setMode("login")}>Kirish</button><button className={mode==="register"?"active":""} onClick={()=>setMode("register")}>Ro‘yxatdan o‘tish</button></div>{mode==="register"&&<><input placeholder="F.I.Sh" value={fullName} onChange={e=>setFullName(e.target.value)}/><input placeholder="Guruh nomi" value={groupName} onChange={e=>setGroupName(e.target.value)}/></>}<input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/><input type="password" placeholder="Parol" value={password} onChange={e=>setPassword(e.target.value)}/>{mode==="login"?<button onClick={login}>Kirish</button>:<button onClick={register}>Ro‘yxatdan o‘tish</button>}</div></div>;
+
+  return <div className="loginPage"><div className="loginCard"><Shield size={42}/><h2>{mode==="login"?"Tizimga kirish":"Ro‘yxatdan o‘tish"}</h2><div className="authSwitch"><button className={mode==="login"?"active":""} onClick={()=>setMode("login")}>Kirish</button><button className={mode==="register"?"active":""} onClick={()=>setMode("register")}>Ro‘yxatdan o‘tish</button></div>{mode==="register"&&<input placeholder="F.I.Sh" value={fullName} onChange={e=>setFullName(e.target.value)}/>}<input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/><input type="password" placeholder="Parol" value={password} onChange={e=>setPassword(e.target.value)}/>{mode==="login"?<button onClick={login}>Kirish</button>:<button onClick={register}>Ro‘yxatdan o‘tish</button>}</div></div>;
 }
 
 function ProfilePage({ user, profile, books, favorites, history, quizResults, themeMode, setThemeMode, loadProfile }) {
@@ -484,7 +557,7 @@ function ProfilePage({ user, profile, books, favorites, history, quizResults, th
     if(error) return alert(error.message);
     setOldPass(""); setNewPass(""); alert("Parol almashtirildi.");
   }
-  return <><SectionTitle title={profile?.role==="admin"?"Admin profili":"Foydalanuvchi kabineti"}/><div className="profileLayout"><div className="profileCard">{profile?.role==="admin"?<Shield size={50}/>:<User size={50}/>}<h2>{profile?.full_name}</h2><p>{user.email}</p><span className="tag">{profile?.role==="admin"?"Administrator":"Foydalanuvchi"}</span></div><div className="profileInfo"><h3>Ro‘yxatdan o‘tgan ma'lumotlar</h3><div className="infoRows"><p><b>F.I.Sh:</b> {profile?.full_name}</p><p><b>Email:</b> {user.email}</p><p><b>Guruh:</b> {profile?.group_name}</p></div><h3>Sayt rejimi</h3><div className="modeGrid">{[["light","Kunduzgi"],["evening","Kechqurun"],["system","Qurilma sozlamasi"],["nightlight","Tungi yorug‘lik"]].map(([v,t])=><button key={v} className={themeMode===v?"active":""} onClick={()=>setThemeMode(v)}>{t}</button>)}</div><h3>Parolni almashtirish</h3><div className="passwordBox"><input type="password" placeholder="Yangi parol" value={newPass} onChange={e=>setNewPass(e.target.value)}/><button onClick={changePassword}>Parolni almashtirish</button></div></div></div><SectionTitle title="Sevimlilar"/><div className="favoriteList">{myFav.length?myFav.map(f=>{const b=books.find(x=>x.id===f.book_id);return <div className="favoriteItem" key={f.id}>{b?.cover_url?<img src={b.cover_url}/>:<div className="miniCover"><BookOpen size={22}/></div>}<div><b>{b?.title||"Kitob"}</b><span>{b?.category} · Qo‘shilgan: {fmtDate(f.created_at)}</span></div></div>}):<Empty text="Hali sevimli kitob qo‘shilmagan."/>}</div><SectionTitle title="O‘qilgan va o‘qilayotgan kitoblar"/><div className="historyList">{myHist.length?myHist.map(h=>{const b=books.find(x=>x.id===h.book_id);return <div key={h.id}><b>{b?.title||"Kitob"}</b><span>{h.status==="downloaded"?"Yuklab olindi":"O‘qilmoqda"} · {fmtDate(h.created_at)}</span></div>}):<Empty text="Hali kitob o‘qilmagan."/>}</div><SectionTitle title="Quiz test natijalari"/><div className="historyList">{myQuiz.length?myQuiz.map(r=><div key={r.id}><b>{r.book_title}</b><span>{r.correct}/{r.total} to‘g‘ri · {r.percent}% · {fmtDate(r.created_at)}</span></div>):<Empty text="Hali quiz test ishlanmagan."/>}</div></>;
+  return <><SectionTitle title={profile?.role==="admin"?"Admin profili":"Foydalanuvchi kabineti"}/><div className="profileLayout"><div className="profileCard">{profile?.role==="admin"?<Shield size={50}/>:<User size={50}/>}<h2>{profile?.full_name}</h2><p>{user.email}</p><span className="tag">{profile?.role==="admin"?"Administrator":"Foydalanuvchi"}</span></div><div className="profileInfo"><h3>Ro‘yxatdan o‘tgan ma'lumotlar</h3><div className="infoRows"><p><b>F.I.Sh:</b> {profile?.full_name}</p><p><b>Email:</b> {user.email}</p></div><h3>Sayt rejimi</h3><div className="modeGrid">{[["light","Kunduzgi"],["evening","Kechqurun"],["system","Qurilma sozlamasi"],["nightlight","Tungi yorug‘lik"]].map(([v,t])=><button key={v} className={themeMode===v?"active":""} onClick={()=>setThemeMode(v)}>{t}</button>)}</div><h3>Parolni almashtirish</h3><div className="passwordBox"><input type="password" placeholder="Yangi parol" value={newPass} onChange={e=>setNewPass(e.target.value)}/><button onClick={changePassword}>Parolni almashtirish</button></div></div></div><SectionTitle title="Sevimlilar"/><div className="favoriteList">{myFav.length?myFav.map(f=>{const b=books.find(x=>x.id===f.book_id);return <div className="favoriteItem" key={f.id}>{b?.cover_url?<img src={b.cover_url}/>:<div className="miniCover"><BookOpen size={22}/></div>}<div><b>{b?.title||"Kitob"}</b><span>{b?.category} · Qo‘shilgan: {fmtDate(f.created_at)}</span></div></div>}):<Empty text="Hali sevimli kitob qo‘shilmagan."/>}</div><SectionTitle title="O‘qilgan va o‘qilayotgan kitoblar"/><div className="historyList">{myHist.length?myHist.map(h=>{const b=books.find(x=>x.id===h.book_id);return <div key={h.id}><b>{b?.title||"Kitob"}</b><span>{h.status==="downloaded"?"Yuklab olindi":"O‘qilmoqda"} · {fmtDate(h.created_at)}</span></div>}):<Empty text="Hali kitob o‘qilmagan."/>}</div><SectionTitle title="Quiz test natijalari"/><div className="historyList">{myQuiz.length?myQuiz.map(r=><div key={r.id}><b>{r.book_title}</b><span>{r.correct}/{r.total} to‘g‘ri · {r.percent}% · {fmtDate(r.created_at)}</span></div>):<Empty text="Hali quiz test ishlanmagan."/>}</div></>;
 }
 
 function AdminPanel({ books, loadBooks, profiles, favorites, history, quizResults, quizQuestions, loadQuizQuestions }) {
