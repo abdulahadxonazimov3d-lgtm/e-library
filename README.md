@@ -113,3 +113,20 @@ Qilish kerak:
 
 Admin:
 admin@kutubxona.uz / 123456
+
+
+## Ro‘yxatdan o‘tish to‘liq chetlab o‘tildi
+
+Bu versiyada foydalanuvchi ro‘yxatdan o‘tishi Supabase Auth bilan umuman bog‘liq emas. Email yuborilmaydi, tasdiqlash bo‘lmaydi, `email rate limit exceeded` chiqmaydi.
+
+Ro‘yxatdan o‘tish maydonlari:
+- F.I.Sh
+- Email
+- Parol
+
+Guruh nomi olib tashlangan.
+
+Majburiy:
+1. GitHub’dagi fayllarni shu ZIP ichidagi fayllar bilan almashtiring.
+2. Vercel’da Redeploy qiling.
+3. Supabase SQL Editor’da yangi `supabase/schema.sql` ni to‘liq Run qiling.
