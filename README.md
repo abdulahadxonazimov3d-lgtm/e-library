@@ -130,3 +130,8 @@ Majburiy:
 1. GitHub’dagi fayllarni shu ZIP ichidagi fayllar bilan almashtiring.
 2. Vercel’da Redeploy qiling.
 3. Supabase SQL Editor’da yangi `supabase/schema.sql` ni to‘liq Run qiling.
+
+
+## F5 bosilganda sahifa saqlanishi
+
+Ushbu versiyada foydalanuvchi qaysi sahifada turgan bo‘lsa, F5 bosilganda ham shu sahifa qayta ochiladi. Agar kitobning batafsil sahifasida bo‘lsa, o‘sha kitob ID orqali qayta tiklanadi.
