@@ -7,7 +7,7 @@ create extension if not exists "pgcrypto";
 create table if not exists public.app_users (
   id uuid primary key default gen_random_uuid(),
   full_name text not null,
-  group_name text not null,
+  group_name text not null default '',
   email text not null unique,
   password text not null,
   role text not null default 'user' check (role in ('user','admin')),
@@ -448,3 +448,22 @@ grant select on public.quiz_questions to anon;
 grant execute on function public.increment_book_view(uuid) to anon;
 grant execute on function public.increment_book_download(uuid) to anon;
 grant execute on function public.refresh_book_rating(uuid) to anon;
+
+
+-- Guruh nomi majburiy bo‘lmasligi uchun
+alter table public.app_users
+  alter column group_name set default '';
+
+update public.app_users
+set group_name = ''
+where group_name is null;
+
+
+-- Ro‘yxatdan o‘tishni email tasdiqlash/rate limitdan to‘liq mustaqil qilish
+alter table public.app_users enable row level security;
+
+drop policy if exists "app_users_demo_all" on public.app_users;
+create policy "app_users_demo_all" on public.app_users
+for all using (true) with check (true);
+
+grant select, insert, update, delete on public.app_users to anon, authenticated;
