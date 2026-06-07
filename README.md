@@ -100,3 +100,16 @@ Parol: 123456
 Bu login faqat admin panel uchun ishlaydi. Oddiy foydalanuvchilar esa ro‘yxatdan o‘tish orqali tizimga kiradi.
 
 Muhim: yangi `supabase/schema.sql` faylini Supabase SQL Editor’da qayta Run qiling, chunki lokal admin panel PDF/rasm yuklay olishi uchun qo‘shimcha policylar qo‘shilgan.
+
+
+## Email rate limit muammosi tuzatildi
+
+Ushbu versiyada oddiy foydalanuvchilar Supabase Auth email tasdiqlash tizimiga bog‘lanmaydi. Ro‘yxatdan o‘tish `public.app_users` jadvali orqali ishlaydi, shuning uchun `email rate limit exceeded` xatosi chiqmaydi.
+
+Qilish kerak:
+1. GitHub’dagi fayllarni shu ZIP ichidagi fayllar bilan almashtiring.
+2. Vercel’da Redeploy qiling.
+3. Supabase SQL Editor’da yangi `supabase/schema.sql` faylini to‘liq qayta Run qiling.
+
+Admin:
+admin@kutubxona.uz / 123456
