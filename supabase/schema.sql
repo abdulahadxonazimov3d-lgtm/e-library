@@ -335,3 +335,54 @@ grant select, update on public.profiles to authenticated;
 grant execute on function public.increment_book_view(uuid) to authenticated;
 grant execute on function public.increment_book_download(uuid) to authenticated;
 grant execute on function public.refresh_book_rating(uuid) to authenticated;
+
+
+-- DEMO ADMIN PANEL UCHUN:
+-- admin@kutubxona.uz / 123456 lokal admin kirishi Supabase Auth ro‘yxatdan o‘tishini talab qilmasligi uchun.
+-- BMI demo uchun qulay. Real production tizimda buni service role yoki Supabase Auth admin bilan almashtirish tavsiya qilinadi.
+
+drop policy if exists "profiles_demo_admin_select" on public.profiles;
+create policy "profiles_demo_admin_select" on public.profiles
+for select using (auth.role() = 'anon');
+
+drop policy if exists "books_demo_admin_all" on public.books;
+create policy "books_demo_admin_all" on public.books
+for all using (auth.role() = 'anon') with check (auth.role() = 'anon');
+
+drop policy if exists "quiz_questions_demo_admin_all" on public.quiz_questions;
+create policy "quiz_questions_demo_admin_all" on public.quiz_questions
+for all using (auth.role() = 'anon') with check (auth.role() = 'anon');
+
+drop policy if exists "comments_demo_admin_select" on public.comments;
+create policy "comments_demo_admin_select" on public.comments
+for select using (auth.role() = 'anon');
+
+drop policy if exists "favorites_demo_admin_select" on public.favorites;
+create policy "favorites_demo_admin_select" on public.favorites
+for select using (auth.role() = 'anon');
+
+drop policy if exists "history_demo_admin_select" on public.reading_history;
+create policy "history_demo_admin_select" on public.reading_history
+for select using (auth.role() = 'anon');
+
+drop policy if exists "quiz_results_demo_admin_select" on public.quiz_results;
+create policy "quiz_results_demo_admin_select" on public.quiz_results
+for select using (auth.role() = 'anon');
+
+drop policy if exists "covers_demo_admin_write" on storage.objects;
+create policy "covers_demo_admin_write" on storage.objects
+for all using (bucket_id = 'book-covers' and auth.role() = 'anon')
+with check (bucket_id = 'book-covers' and auth.role() = 'anon');
+
+drop policy if exists "pdfs_demo_admin_write" on storage.objects;
+create policy "pdfs_demo_admin_write" on storage.objects
+for all using (bucket_id = 'book-pdfs' and auth.role() = 'anon')
+with check (bucket_id = 'book-pdfs' and auth.role() = 'anon');
+
+grant select on public.profiles to anon;
+grant select, insert, update, delete on public.books to anon;
+grant select, insert, update, delete on public.quiz_questions to anon;
+grant select on public.comments to anon;
+grant select on public.favorites to anon;
+grant select on public.reading_history to anon;
+grant select on public.quiz_results to anon;
