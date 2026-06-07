@@ -3,6 +3,29 @@
 
 create extension if not exists "pgcrypto";
 
+-- Oddiy foydalanuvchilar uchun Supabase Auth'dan mustaqil jadval
+create table if not exists public.app_users (
+  id uuid primary key default gen_random_uuid(),
+  full_name text not null,
+  group_name text not null default '',
+  email text not null unique,
+  password text not null,
+  role text not null default 'user' check (role in ('user','admin')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.app_users enable row level security;
+
+drop policy if exists "app_users_demo_all" on public.app_users;
+create policy "app_users_demo_all" on public.app_users
+for all using (true) with check (true);
+
+grant select, insert, update, delete on public.app_users to anon, authenticated;
+
+alter table public.app_users alter column group_name set default '';
+update public.app_users set group_name = '' where group_name is null;
+
+
 
 create table if not exists public.app_users (
   id uuid primary key default gen_random_uuid(),
@@ -467,3 +490,84 @@ create policy "app_users_demo_all" on public.app_users
 for all using (true) with check (true);
 
 grant select, insert, update, delete on public.app_users to anon, authenticated;
+
+
+-- app_users UUID ishlashi uchun auth.users foreign key cheklovlarini olib tashlash
+do $$
+declare
+  r record;
+begin
+  for r in
+    select conrelid::regclass::text as table_name, conname
+    from pg_constraint
+    where contype = 'f'
+      and conrelid in (
+        'public.comments'::regclass,
+        'public.favorites'::regclass,
+        'public.reading_history'::regclass,
+        'public.quiz_results'::regclass
+      )
+      and pg_get_constraintdef(oid) ilike '%auth.users%'
+  loop
+    execute format('alter table %s drop constraint if exists %I', r.table_name, r.conname);
+  end loop;
+end $$;
+
+
+-- Demo uchun app userlar bilan ishlaydigan ochiq RLS policylar
+drop policy if exists "favorites_app_all" on public.favorites;
+create policy "favorites_app_all" on public.favorites for all using (true) with check (true);
+
+drop policy if exists "quiz_results_app_all" on public.quiz_results;
+create policy "quiz_results_app_all" on public.quiz_results for all using (true) with check (true);
+
+drop policy if exists "comments_app_all" on public.comments;
+create policy "comments_app_all" on public.comments for all using (true) with check (true);
+
+drop policy if exists "history_app_all" on public.reading_history;
+create policy "history_app_all" on public.reading_history for all using (true) with check (true);
+
+drop policy if exists "books_app_select" on public.books;
+create policy "books_app_select" on public.books for select using (true);
+
+drop policy if exists "quiz_questions_app_select" on public.quiz_questions;
+create policy "quiz_questions_app_select" on public.quiz_questions for select using (true);
+
+grant select, insert, update, delete on public.favorites to anon, authenticated;
+grant select, insert, update, delete on public.quiz_results to anon, authenticated;
+grant select, insert, update, delete on public.comments to anon, authenticated;
+grant select, insert, update, delete on public.reading_history to anon, authenticated;
+grant select on public.books to anon, authenticated;
+grant select on public.quiz_questions to anon, authenticated;
+
+
+create or replace function public.increment_book_view(book_uuid uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.books
+  set views = views + 1,
+      updated_at = now()
+  where id = book_uuid;
+end;
+$$;
+
+create or replace function public.increment_book_download(book_uuid uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.books
+  set downloads = downloads + 1,
+      updated_at = now()
+  where id = book_uuid;
+end;
+$$;
+
+grant execute on function public.increment_book_view(uuid) to anon, authenticated;
+grant execute on function public.increment_book_download(uuid) to anon, authenticated;
